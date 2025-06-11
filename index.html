@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Gestor de Finanzas</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <style>
+    body {
+      background-color: #f5f7fa;
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    main { flex: 1; }
+    .titulo-seccion {
+      font-weight: 600;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #333;
+    }
+    .seccion-agregar, .seccion-filtro, .resumen, .seccion-tabla {
+      background: white;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+      margin-bottom: 20px;
+    }
+    .resumen { background: #dbeafe; }
+    .seccion-agregar { background: #fef9c3; }
+    .seccion-filtro { background: #dcfce7; }
+    .seccion-tabla { background: #fef2f2; }
+    #grafico { max-height: 300px; }
+    .tabla-container { overflow-x: auto; }
+    body.dark-mode { background-color: #121212; color: #e0e0e0; }
+    body.dark-mode .seccion-agregar { background: #3e3e2f; }
+    body.dark-mode .seccion-filtro { background: #2e4b36; }
+    body.dark-mode .resumen { background: #263a4d; }
+    body.dark-mode .seccion-tabla { background: #4d2e2e; }
+    body.dark-mode .table { color: #f1f1f1; }
+    body.dark-mode .table-light th { background-color: #333; color: #fff; }
+    .dark-toggle { position: absolute; top: 10px; right: 10px; }
+  </style>
+</head>
+<body>
+  <button class="btn btn-sm btn-secondary dark-toggle" onclick="toggleDarkMode()">
+    <i class="bi bi-moon-fill"></i> Modo Oscuro
+  </button>
+  <main class="container py-4">
+    <div class="row">
+      <div class="col-md-4">
+        <div class="seccion-agregar">
+          <h5 class="titulo-seccion"><i class="bi bi-plus-circle-fill"></i> Agregar Movimiento</h5>
+          <form id="formulario">
+            <div class="row">
+              <div class="col-6">
+                <label class="form-label">Tipo</label>
+                <select class="form-select" id="tipo">
+                  <option value="ingreso">Ingreso</option>
+                  <option value="gasto">Gasto</option>
+                </select>
+                <label class="form-label mt-2">Monto</label>
+                <input type="number" class="form-control" id="monto" required>
+                <label class="form-label mt-2">Foto</label>
+                <input type="file" class="form-control" id="foto" accept="image/*">
+              </div>
+              <div class="col-6">
+                <label class="form-label">Categoría</label>
+                <select class="form-select" id="categoria">
+                  <option value="Ventas">Ventas</option>
+                  <option value="Compras">Compras</option>
+                  <option value="Servicios">Servicios</option>
+                  <option value="Mantenimiento">Mantenimiento</option>
+                  <option value="Publicidad">Publicidad</option>
+                  <option value="Transporte">Transporte</option>
+                  <option value="Impuestos">Impuestos</option>
+                </select>
+                <label class="form-label mt-2">Fecha</label>
+                <input type="date" class="form-control" id="fecha" required>
+              </div>
+            </div>
+            <button class="btn btn-primary w-100 mt-3" type="submit">
+              <i class="bi bi-check-circle-fill me-1"></i>Guardar Movimiento
+            </button>
+          </form>
+        </div>
+      </div>
+      <div class="col-md-8">
+        <div class="seccion-filtro">
+          <h5 class="titulo-seccion"><i class="bi bi-funnel-fill"></i> Filtrar Movimientos</h5>
+          <label>Desde:</label>
+          <input type="date" class="form-control mb-2" id="desde">
+          <label>Hasta:</label>
+          <input type="date" class="form-control mb-2" id="hasta">
+          <label>Categoría:</label>
+          <input type="text" id="filtroCategoria" class="form-control mb-2" placeholder="Ej: Ventas, Compras...">
+        </div>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="resumen">
+              <h5><i class="bi bi-graph-up-arrow"></i>Resumen</h5>
+              <p>Ingresos: <span id="totalIngresos">$0</span></p>
+              <p>Gastos: <span id="totalGastos">$0</span></p>
+              <p>Balance: <span id="balance">$0</span></p>
+            </div>
+          </div>
+          <div class="col-md-6 text-center">
+            <h5 class="titulo-seccion"><i class="bi bi-pie-chart-fill"></i>Gráfico</h5>
+            <canvas id="grafico" style="height: 300px;"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="seccion-tabla">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h5 class="titulo-seccion"><i class="bi bi-journal-text"></i> Historial de Movimientos</h5>
+        <button class="btn btn-success btn-sm" onclick="exportarExcel()">
+          <i class="bi bi-file-earmark-excel-fill me-1"></i> Exportar a Excel
+        </button>
+      </div>
+      <div class="tabla-container">
+        <table class="table table-bordered table-hover">
+          <thead class="table-light">
+            <tr>
+              <th>Tipo</th>
+              <th>Monto</th>
+              <th>Categoría</th>
+              <th>Fecha</th>
+              <th>Foto</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tablaMovimientos"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    let movimientos = JSON.parse(localStorage.getItem('movimientos')) || [];
+
+    document.getElementById('formulario').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const tipo = document.getElementById('tipo').value;
+      const monto = parseFloat(document.getElementById('monto').value);
+      const categoria = document.getElementById('categoria').value;
+      const fecha = document.getElementById('fecha').value;
+      const fotoInput = document.getElementById('foto');
+      const reader = new FileReader();
+
+      if (fotoInput.files.length > 0) {
+        reader.readAsDataURL(fotoInput.files[0]);
+        reader.onload = () => {
+          const imagenBase64 = reader.result;
+          guardarMovimiento(tipo, monto, categoria, fecha, imagenBase64);
+        };
+      } else {
+        guardarMovimiento(tipo, monto, categoria, fecha, null);
+      }
+    });
+
+    function guardarMovimiento(tipo, monto, categoria, fecha, imagen) {
+      movimientos.push({ tipo, monto, categoria, fecha, imagen });
+      localStorage.setItem('movimientos', JSON.stringify(movimientos));
+      document.getElementById('formulario').reset();
+      actualizarTodo();
+    }
+
+    function actualizarTodo() {
+      actualizarTabla();
+      actualizarResumen();
+      actualizarGrafico();
+    }
+
+    function actualizarTabla() {
+      const tabla = document.getElementById('tablaMovimientos');
+      tabla.innerHTML = "";
+      movimientos.forEach((m, i) => {
+        const fila = document.createElement('tr');
+        fila.innerHTML = `
+          <td>${m.tipo}</td>
+          <td>$${m.monto.toLocaleString('es-CO')}</td>
+          <td>${m.categoria}</td>
+          <td>${m.fecha}</td>
+          <td>${m.imagen ? '<a href="' + m.imagen + '" download="comprobante.png" class="btn btn-sm btn-outline-primary">Ver</a>' : 'Sin imagen'}</td>
+          <td><button class="btn btn-danger btn-sm" onclick="eliminarMovimiento(${i})"><i class="bi bi-trash"></i></button></td>
+        `;
+        tabla.appendChild(fila);
+      });
+    }
+
+    function eliminarMovimiento(index) {
+      movimientos.splice(index, 1);
+      localStorage.setItem('movimientos', JSON.stringify(movimientos));
+      actualizarTodo();
+    }
+
+    function actualizarResumen() {
+      const ingresos = movimientos.filter(m => m.tipo === 'ingreso').reduce((acc, m) => acc + m.monto, 0);
+      const gastos = movimientos.filter(m => m.tipo === 'gasto').reduce((acc, m) => acc + m.monto, 0);
+      document.getElementById('totalIngresos').textContent = ingresos.toLocaleString('es-CO', { style: 'currency', currency: 'COP' });
+      document.getElementById('totalGastos').textContent = gastos.toLocaleString('es-CO', { style: 'currency', currency: 'COP' });
+      document.getElementById('balance').textContent = (ingresos - gastos).toLocaleString('es-CO', { style: 'currency', currency: 'COP' });
+    }
+
+    let grafico;
+    function actualizarGrafico() {
+      const ingresos = movimientos.filter(m => m.tipo === 'ingreso').reduce((acc, m) => acc + m.monto, 0);
+      const gastos = movimientos.filter(m => m.tipo === 'gasto').reduce((acc, m) => acc + m.monto, 0);
+      const ctx = document.getElementById('grafico').getContext('2d');
+      if (grafico) grafico.destroy();
+      grafico = new Chart(ctx, {
+        type: 'pie',
+        data: {
+          labels: ['Ingresos', 'Gastos'],
+          datasets: [{ data: [ingresos, gastos], backgroundColor: ['#34d399', '#f87171'] }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+      });
+    }
+
+    function exportarExcel() {
+      const wb = XLSX.utils.book_new();
+      const ws_data = [ ["Tipo", "Monto", "Categoría", "Fecha", "Imagen"] ];
+      movimientos.forEach(m => {
+        ws_data.push([
+          m.tipo,
+          m.monto,
+          m.categoria,
+          m.fecha,
+          m.imagen ? { t: "s", l: { Target: m.imagen }, v: "Ver imagen" } : "Sin imagen"
+        ]);
+      });
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      ws["!cols"] = [ {wch:10},{wch:14},{wch:20},{wch:15},{wch:30} ];
+      XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
+      XLSX.writeFile(wb, "movimientos.xlsx");
+    }
+
+    function toggleDarkMode() {
+      document.body.classList.toggle('dark-mode');
+      localStorage.setItem('darkMode', document.body.classList.contains('dark-mode') ? 'true' : 'false');
+    }
+
+    (function () {
+      if (localStorage.getItem('darkMode') === 'true') {
+        document.body.classList.add('dark-mode');
+      }
+      actualizarTodo();
+    })();
+  </script>
+</body>
+</html>
